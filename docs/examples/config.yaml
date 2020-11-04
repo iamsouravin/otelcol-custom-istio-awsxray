@@ -1,0 +1,22 @@
+receivers:
+  zipkin:
+
+processors:
+  batch:
+    send_batch_size: 10000
+    timeout: 10s
+
+exporters:
+  awsxray:
+    region: us-east-1
+    local_mode: true
+
+service:
+  pipelines:
+    traces:
+      receivers:
+      - zipkin
+      processors:
+      - batch
+      exporters:
+      - awsxray

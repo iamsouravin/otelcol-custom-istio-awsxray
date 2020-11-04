@@ -1,0 +1,80 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tracing
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otelcol-custom-config
+  namespace: tracing
+data:
+  config.yaml: |
+    receivers:
+      zipkin: {}
+    processors: {}
+    exporters:
+      awsxray:
+        traceid_cache_endpoint: local://
+        traceid_cache_ttl_seconds: 5
+      logging:
+        loglevel: debug
+    service:
+      pipelines:
+        traces:
+          receivers:
+            - zipkin
+          processors: []
+          exporters:
+            - awsxray
+            - logging
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otelcol-custom
+  namespace: tracing
+spec:
+  selector:
+    matchLabels:
+      app: otelcol-custom
+  template:
+    metadata:
+      labels:
+        app: otelcol-custom
+    spec:
+      containers:
+        - name: otelcol-custom
+          image: $IMAGE
+          imagePullPolicy: Always
+          args:
+            - "--config"
+            - "/config/config.yaml"
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+          ports:
+            - name: zipkin
+              containerPort: 9411
+          volumeMounts:
+            - name: otelcol-custom-config
+              mountPath: /config
+      volumes:
+        - name: otelcol-custom-config
+          configMap:
+            name: otelcol-custom-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zipkin
+  namespace: tracing
+  labels:
+    app: otelcol-custom
+spec:
+  selector:
+    app: otelcol-custom
+  ports:
+    - port: 9411
