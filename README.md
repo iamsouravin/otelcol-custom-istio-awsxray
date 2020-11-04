@@ -8,7 +8,7 @@ The build script downloads a customized version of `awsxrayexporter` to propagat
 
 | Property | Value |
 |----------|-------|
-| `ExeName` | `otelcol-custom` |
+| `ExeName` | `otelcol-custom-istio-awsxray` |
 | `LongName` | `OpenTelemetry Collector Custom Distribution` |
 | `Version` | Image tag version used in docker build. |
 | `GitHash` | Git commit hash used in docker build. |
@@ -27,10 +27,10 @@ Components are added in `components.go`.
 
 ## Build
 
-Build script `bin/build.sh` checks if `dependencies` directory is present and contains the `awsxrayexport` project directory. If not then downloads the source and copies the project contents into the `dependencies` directory. After the build updates generates manifest file `docs/examples/otelcol-custom-manifest.yaml` with the image tag information.
+Build script `bin/build.sh` checks if `dependencies` directory is present and contains the `awsxrayexport` project directory. If not then downloads the source and copies the project contents into the `dependencies` directory. After the build updates generates manifest file `docs/examples/otelcol-custom-istio-awsxray-manifest.yaml` with the image tag information.
 
 ```shell
-bin/build.sh -t $ACCOUNTID.dkr.ecr.$REGION.amazonaws.com/otelcol-custom:0.1.0
+bin/build.sh -t $ACCOUNTID.dkr.ecr.$REGION.amazonaws.com/otelcol-custom-istio-awsxray:0.1.0
 ```
 
 ## Run
