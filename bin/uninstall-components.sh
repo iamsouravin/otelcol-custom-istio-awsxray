@@ -35,6 +35,8 @@ uninstall_istio() {
   ./bin/istioctl manifest generate -f $BASE_DIR/$EXAMPLES_DIR/tracing.yaml \
   --set values.global.tracer.zipkin.address=zipkin.tracing:9411 \
   | kubectl delete -f -
+  info "Deleting 'istio-system' namespace..."
+  kubectl delete ns istio-system
 }
 
 unmark_default_namespace() {
