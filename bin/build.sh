@@ -1,6 +1,8 @@
 #!/bin/bash
 
-SCRIPT_NAME=$0
+export SCRIPT_NAME=${BASH_SOURCE[0]}
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+BASE_DIR=$( cd "$SCRIPT_DIR/.." && pwd )
 DEBUG=0
 TMP_DIR="/tmp"
 OTEL_COL_CONTRIB_PROJECT=opentelemetry-collector-contrib
@@ -12,6 +14,8 @@ EXAMPLES_DIR=docs/examples/
 K8S_MANIFEST_TEMPLATE=otelcol-custom-istio-awsxray-manifest.template
 K8S_MANIFEST=otelcol-custom-istio-awsxray-manifest.yaml
 DEP_DIR="dependencies/$EXPORTER_PROJECT"
+
+source $SCRIPT_DIR/log.sh
 
 copy_contrib_project() {
   debug "Checking if '$BASE_DIR/$DEP_DIR' directory is empty..."
@@ -78,26 +82,6 @@ git_checkout_project() {
   git checkout $BRANCH -q
 }
 
-log() {
-  DT_PREFIX=`date +"%FT%T%Z"`
-  printf -v LOG_LEVEL "[%-5s]" $1
-  echo "[$DT_PREFIX] $LOG_LEVEL [$SCRIPT_NAME] - $2"
-}
-
-error() {
-  log ERROR "$1"  
-}
-
-info() {
-  log INFO "$1"
-}
-
-debug() {
-  if [ "$DEBUG" -eq "1" ]; then
-    log DEBUG "$1"
-  fi
-}
-
 usage() {
   EXIT_CODE=0
   if [ ! -z "$1" ]; then
@@ -145,21 +129,19 @@ if [ -z "${TAG}" ]; then
 fi
 
 IMG_REPO=`echo $TAG | awk -F: '{print $1}'`
-IMG_TAG=`echo $TAG | awk -F: '{print $2}'`
+IMG_RELEASE=`echo $TAG | awk -F: '{print $2}'`
 
 if [ -z "${IMG_REPO}" ]; then
   usage 1 "repo missing from tag."
 fi
 
-if [ -z "${IMG_TAG}" ]; then
+if [ -z "${IMG_RELEASE}" ]; then
   usage 1 "version missing from tag."
 fi
 
 info "Image Repository: $IMG_REPO"
-info "Image Version: $IMG_TAG"
+info "Image Version: $IMG_RELEASE"
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-BASE_DIR=$( cd "$DIR/.." && pwd )
 info "Project Directory: $BASE_DIR"
 
 create_dependencies_directory
@@ -168,11 +150,20 @@ copy_contrib_project
 
 cd $BASE_DIR
 info "Launching docker build..."
-docker build -t $IMG_REPO:$IMG_TAG --build-arg IMG_RELEASE=$IMG_TAG .
-
-if [ $? -eq 0 ]; then
-  info "Creating new manifest from template '$EXAMPLES_DIR/$K8S_MANIFEST_TEMPLATE'..."
-  sed "s#\$IMAGE#${TAG}#g" $EXAMPLES_DIR/$K8S_MANIFEST_TEMPLATE > $EXAMPLES_DIR/$K8S_MANIFEST
-else
+docker build -t $IMG_REPO:$IMG_RELEASE --build-arg IMG_RELEASE=$IMG_RELEASE .
+if [ $? -ne 0 ]; then
   error "Docker build failed. Aborting!"
+  exit 1
 fi
+
+info "Creating new manifest from template '$EXAMPLES_DIR/$K8S_MANIFEST_TEMPLATE'..."
+sed "s#\$IMAGE#${TAG}#g" $EXAMPLES_DIR/$K8S_MANIFEST_TEMPLATE > $EXAMPLES_DIR/$K8S_MANIFEST
+if [ $? -ne 0 ]; then
+  error "Could not generate manifest file. Aborting!"
+  exit 1
+fi
+
+info "Next Steps:"
+info "-----------"
+info "$ docker image push $IMG_REPO:$IMG_RELEASE"
+info "$ $SCRIPT_DIR/install-components.sh"
