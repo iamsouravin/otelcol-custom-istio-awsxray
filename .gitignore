@@ -22,3 +22,6 @@ dependencies
 docs/examples/otelcol-custom-istio-awsxray-manifest.yaml
 
 .DS_Store
+
+# Ignore istio directory
+istio-*

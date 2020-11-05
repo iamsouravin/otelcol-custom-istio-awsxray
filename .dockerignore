@@ -19,3 +19,8 @@
 
 # Ignore utility binaries
 bin/
+
+.DS_Store
+
+# Ignore istio directory
+istio-*
