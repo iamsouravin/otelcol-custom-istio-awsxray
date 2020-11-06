@@ -63,7 +63,7 @@ usage() {
   fi
 
   echo "" 1>&2
-  echo "Usage: $SCRIPT_NAME [-h] [-d]" 1>&2
+  echo "Usage: $SCRIPT_NAME [[-h] | [-d]]" 1>&2
   echo "" 1>&2
   echo "Arguments:" 1>&2
   echo "-d                : Enable debug logging." 1>&2
