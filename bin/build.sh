@@ -4,6 +4,7 @@ export SCRIPT_NAME=${BASH_SOURCE[0]}
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 BASE_DIR=$( cd "$SCRIPT_DIR/.." && pwd )
 DEBUG=0
+OVERWRITE=0
 TMP_DIR="/tmp"
 OTEL_COL_CONTRIB_PROJECT=opentelemetry-collector-contrib
 GIT_CLONE_URL=https://github.com/iamsouravin/$OTEL_COL_CONTRIB_PROJECT.git
@@ -20,6 +21,13 @@ source $SCRIPT_DIR/log.sh
 copy_contrib_project() {
   debug "Checking if '$BASE_DIR/$DEP_DIR' directory is empty..."
   DIR_LST=$(ls -A $BASE_DIR/$DEP_DIR)
+  if [ ! -z "$DIR_LST" ] && [ "$OVERWRITE" -eq 1 ]; then
+    warn "Directory is not empty. Directory contents will be deleted!"
+    find $BASE_DIR/$DEP_DIR -name '*' -depth 1 -print0 | xargs -0  rm -rf
+    debug "Rechecking if '$BASE_DIR/$DEP_DIR' directory is empty..."
+    DIR_LST=$(ls -A $BASE_DIR/$DEP_DIR)
+  fi
+  
   if [ -z "$DIR_LST" ]; then
     debug "Directory is empty..."
     
@@ -46,6 +54,7 @@ copy_contrib_project() {
 
     debug "Copying '$EXPORTER_PROJECT' project directory into '$BASE_DIR/dependencies'..."
     cp -r $OTEL_COL_CONTRIB_DIR/exporter/$EXPORTER_PROJECT ./
+
   else
     debug "Directory is not empty. Skipping copy step."
   fi
@@ -93,10 +102,11 @@ usage() {
   fi
 
   echo "" 1>&2
-  echo "Usage: $SCRIPT_NAME [-d] -t <repo:version>" 1>&2
+  echo "Usage: $SCRIPT_NAME [-h] | [[-d] [-f] -t <repo:version>]" 1>&2
   echo "" 1>&2
   echo "Arguments:" 1>&2
   echo "-d                : Enable debug logging." 1>&2
+  echo "-f                : Force overwrite dependencies directory." 1>&2
   echo "-h                : Print this usage information and exit." 1>&2
   echo "-t <repo:version> : Docker tag for docker build." 1>&2
   echo "" 1>&2
@@ -106,10 +116,13 @@ usage() {
 
 # --- main ---
 
-while getopts "hdt:" o; do
+while getopts "dfht:" o; do
   case "${o}" in
     d)
       DEBUG=1
+      ;;
+    f)
+      OVERWRITE=1
       ;;
     t)
       TAG=${OPTARG}
