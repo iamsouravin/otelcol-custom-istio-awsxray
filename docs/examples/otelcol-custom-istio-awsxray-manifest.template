@@ -51,6 +51,10 @@ spec:
           args:
             - "--config"
             - "/config/config.yaml"
+            - "--log-level"
+            - "DEBUG"
+            - "--log-profile"
+            - "dev"
           resources:
             limits:
               memory: "128Mi"
