@@ -10,6 +10,10 @@ error() {
   log ERROR "$1"  
 }
 
+warn() {
+  log WARN "$1"  
+}
+
 info() {
   log INFO "$1"
 }
