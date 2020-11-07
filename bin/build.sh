@@ -11,7 +11,7 @@ GIT_CLONE_URL=https://github.com/iamsouravin/$OTEL_COL_CONTRIB_PROJECT.git
 OTEL_COL_CONTRIB_DIR=$TMP_DIR/$OTEL_COL_CONTRIB_PROJECT
 EXPORTER_PROJECT=awsxrayexporter
 BRANCH=istio-build
-EXAMPLES_DIR=docs/examples/
+EXAMPLES_DIR=docs/examples
 K8S_MANIFEST_TEMPLATE=otelcol-custom-istio-awsxray-manifest.template
 K8S_MANIFEST=otelcol-custom-istio-awsxray-manifest.yaml
 DEP_DIR="dependencies/$EXPORTER_PROJECT"
@@ -175,6 +175,7 @@ if [ $? -ne 0 ]; then
   error "Could not generate manifest file. Aborting!"
   exit 1
 fi
+info "Created new manifest: $EXAMPLES_DIR/$K8S_MANIFEST"
 
 info "Next Steps:"
 info "-----------"
