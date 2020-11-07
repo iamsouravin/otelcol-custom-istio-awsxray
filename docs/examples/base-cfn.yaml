@@ -1,0 +1,336 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Base stack for otelcol-custom-istio-awsxray project
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: "Amazon Elastic Container Registry (ECR) Details"
+        Parameters:
+          - ECRRepoName
+      - Label:
+          default: "Amazon Elastic Kubernetes Service (EKS) Cluster Details"
+        Parameters:
+          - EKSClusterName
+          - K8sVersion
+    ParameterLabels: 
+      ECRRepoName:
+        default: "Repository Name"
+      EKSClusterName:
+        default: "Cluster Name"
+      K8sVersion:
+        default: "Kubernetes Version"
+
+Parameters:
+  ECRRepoName:
+    Description: ECR repository where docker images will be uploaded.
+    Type: String
+    MinLength: 2
+    MaxLength: 256
+    AllowedPattern: (?:[a-z0-9]+(?:[._-][a-z0-9]+)*/)*[a-z0-9]+(?:[._-][a-z0-9]+)*
+    Default: otelcol-custom-istio-awsxray
+  EKSClusterName:
+    Description: EKS cluster name
+    Type: String
+    MinLength: 1
+    MaxLength: 100
+    AllowedPattern: ^[0-9A-Za-z][A-Za-z0-9\-_]*
+    Default: tracing-cluster
+  K8sVersion:
+    Description: Kubernetes version. See https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html
+    Type: String
+    Default: "1.18"
+    AllowedValues:
+      - "1.18"
+      - "1.17"
+      - "1.16"
+      - "1.15"
+
+Resources:  
+  ECRRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref ECRRepoName
+      Tags: 
+        - Key: Solution
+          Value: !Sub "Distributed Tracing - ${AWS::StackName}"
+
+  EksClusterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EKS Cluster Security Group
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - CidrIp: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, 5, 8 ]]
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-EKSClusterSecurityGroup"
+        - Key: Solution
+          Value: !Sub "Distributed Tracing - ${AWS::StackName}"
+
+  EksClusterSGIngressAllowSelf:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EksClusterSecurityGroup
+      IpProtocol: "-1"
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref EksClusterSecurityGroup
+
+  EksClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - eks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      Tags:
+        - Key: Solution
+          Value: !Sub "Distributed Tracing - ${AWS::StackName}"
+
+  EksControlPlane:
+    Type: AWS::EKS::Cluster
+    Properties: 
+      Name: !Ref EKSClusterName
+      Version: !Ref K8sVersion
+      ResourcesVpcConfig: 
+        SecurityGroupIds:
+          - !Ref EksClusterSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetOne
+          - !Ref PrivateSubnetTwo
+      RoleArn: !GetAtt EksClusterRole.Arn
+
+  EksManagedNodeGroupInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      Policies:
+        - PolicyName: !Sub allow-xray-put-${AWS::Region}-${AWS::StackName}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - xray:PutTelemetryRecords
+                  - xray:PutTraceSegments
+                Resource: "*"
+      Tags:
+        - Key: Solution
+          Value: !Sub "Distributed Tracing - ${AWS::StackName}"
+
+  EksManagedNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties: 
+      AmiType: AL2_x86_64
+      ClusterName: !Ref EksControlPlane
+      InstanceTypes: 
+        - m5.xlarge
+      NodegroupName: managed-ng-1
+      NodeRole: !GetAtt EksManagedNodeGroupInstanceRole.Arn
+      ScalingConfig:
+        DesiredSize: 3
+        MaxSize: 5
+        MinSize: 2
+      Subnets:
+        - !Ref PrivateSubnetOne
+        - !Ref PrivateSubnetTwo
+      Tags: {
+        "Key": "Solution",
+        "Value": !Sub "Distributed Tracing - ${AWS::StackName}"
+      }
+
+  # Network Configuration
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub VPC-${AWS::StackName}
+        - Key: Solution
+          Value: !Sub "Distributed Tracing - ${AWS::StackName}"
+
+  # Two public subnets
+  PublicSubnetOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 0
+         - Fn::GetAZs: {Ref: "AWS::Region"}
+      VpcId: !Ref "VPC"
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC.CidrBlock, 5, 8 ]]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub PublicSubnetOne-${AWS::StackName}
+        - Key: Solution
+          Value: !Sub "Distributed Tracing - ${AWS::StackName}"
+        - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
+          Value: shared
+  PublicSubnetTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 1
+         - Fn::GetAZs: {Ref: "AWS::Region"}
+      VpcId: !Ref "VPC"
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC.CidrBlock, 5, 8 ]]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub PublicSubnetTwo-${AWS::StackName}
+        - Key: Solution
+          Value: !Sub "Distributed Tracing - ${AWS::StackName}"
+        - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
+          Value: shared
+
+  PrivateSubnetOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 0
+         - Fn::GetAZs: {Ref: "AWS::Region"}
+      VpcId: !Ref "VPC"
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC.CidrBlock, 5, 8 ]]
+      Tags:
+        - Key: Name
+          Value: !Sub PrivateSubnetOne-${AWS::StackName}
+        - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
+          Value: shared
+        - Key: Solution
+          Value: !Sub "Distributed Tracing - ${AWS::StackName}"
+  PrivateSubnetTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 1
+         - Fn::GetAZs: {Ref: "AWS::Region"}
+      VpcId: !Ref "VPC"
+      CidrBlock: !Select [ 3, !Cidr [ !GetAtt VPC.CidrBlock, 5, 8 ]]
+      Tags:
+        - Key: Name
+          Value: !Sub PrivateSubnetTwo-${AWS::StackName}
+        - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
+          Value: shared
+        - Key: Solution
+          Value: !Sub "Distributed Tracing - ${AWS::StackName}"
+
+  # Setup networking resources for the public subnets.
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  GatewayAttachement:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref "VPC"
+      InternetGatewayId: !Ref 'InternetGateway'
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref "VPC"
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachement
+    Properties:
+      RouteTableId: !Ref "PublicRouteTable"
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref "InternetGateway"
+  PublicSubnetOneRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetOne
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetTwoRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetTwo
+      RouteTableId: !Ref PublicRouteTable
+
+  # Setup networking resources for the private subnets.
+  NatGatewayOneAttachment:
+    Type: AWS::EC2::EIP
+    DependsOn: GatewayAttachement
+    Properties:
+        Domain: vpc
+  NatGatewayTwoAttachment:
+    Type: AWS::EC2::EIP
+    DependsOn: GatewayAttachement
+    Properties:
+        Domain: vpc
+  NatGatewayOne:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayOneAttachment.AllocationId
+      SubnetId: !Ref PublicSubnetOne
+  NatGatewayTwo:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayTwoAttachment.AllocationId
+      SubnetId: !Ref PublicSubnetTwo
+  PrivateRouteTableOne:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref "VPC"
+  PrivateRouteOne:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableOne
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayOne
+  PrivateRouteTableOneAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableOne
+      SubnetId: !Ref PrivateSubnetOne
+  PrivateRouteTableTwo:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref "VPC"
+  PrivateRouteTwo:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableTwo
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayTwo
+  PrivateRouteTableTwoAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableTwo
+      SubnetId: !Ref PrivateSubnetTwo
+
+Outputs:
+
+  ECRRepo:
+    Description: ECR image URI
+    Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepo}
+
