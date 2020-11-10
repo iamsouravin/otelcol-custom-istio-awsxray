@@ -24,3 +24,6 @@ bin/
 
 # Ignore istio directory
 istio-*
+
+# Ignore logs
+*.log

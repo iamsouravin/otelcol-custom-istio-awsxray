@@ -25,3 +25,6 @@ docs/examples/otelcol-custom-istio-awsxray-manifest.yaml
 
 # Ignore istio directory
 istio-*
+
+# Ignore logs
+*.log
