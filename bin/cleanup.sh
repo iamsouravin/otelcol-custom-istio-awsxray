@@ -3,6 +3,7 @@
 export SCRIPT_NAME=${BASH_SOURCE[0]}
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 BASE_DIR=$( cd "$SCRIPT_DIR/.." && pwd )
+DEBUG=0
 TMP_DIR="/tmp"
 OTEL_COL_CONTRIB_PROJECT=opentelemetry-collector-contrib
 OTEL_COL_CONTRIB_DIR=$TMP_DIR/$OTEL_COL_CONTRIB_PROJECT
