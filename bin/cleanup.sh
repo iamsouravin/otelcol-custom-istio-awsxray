@@ -8,6 +8,8 @@ TMP_DIR="/tmp"
 OTEL_COL_CONTRIB_PROJECT=opentelemetry-collector-contrib
 OTEL_COL_CONTRIB_DIR=$TMP_DIR/$OTEL_COL_CONTRIB_PROJECT
 DEP_DIR="dependencies"
+ERRORS=0
+WARNINGS=0
 
 source $SCRIPT_DIR/log.sh
 
@@ -18,7 +20,8 @@ remove_contrib_project_directory() {
   if [ ! -d "$OTEL_COL_CONTRIB_DIR" ]; then
     debug "Directory removed successfully."
   else
-    warn "Directory could not be removed completely!"
+    ERRORS=1
+    error "Directory could not be removed completely!"
   fi
 }
 
@@ -29,7 +32,8 @@ remove_dependencies_directory() {
   if [ ! -d "$BASE_DIR/$DEP_DIR" ]; then
     debug "Directory removed successfully."
   else
-    warn "Directory could not be removed completely!"
+    ERRORS=1
+    error "Directory could not be removed completely!"
   fi
 }
 
@@ -37,7 +41,8 @@ prune_docker_builder_cache() {
   debug "Pruning docker builder cache..."
   docker builder prune -af
   if [ $? -ne 0 ]; then
-    warn "Docker builder cache prune command failed!"
+    ERRORS=1
+    error "Docker builder cache prune command failed!"
   else
     debug "Docker builder cache pruned successfully."
   fi
@@ -47,7 +52,8 @@ clean_go_cache() {
   debug "Cleaning go cache..."
   go clean -cache
   if [ $? -ne 0 ]; then
-    warn "Go cache clean command failed!"
+    ERRORS=1
+    error "Go cache clean command failed!"
   else
     debug "Go cache cleaned successfully."
   fi
@@ -127,8 +133,15 @@ cd $BASE_DIR
 info "Removing docker image with tag '$IMG_REPO:$IMG_RELEASE'..."
 docker image rm $IMG_REPO:$IMG_RELEASE
 if [ $? -ne 0 ]; then
-  error "Docker remove image command failed. Aborting!"
-  exit 1
+  ERRORS=1
+  error "Docker remove image command failed."
 fi
 
-info "Cleanup script done."
+if [ $ERRORS -eq 0 ] && [ $WARNINGS -eq 0 ]; then
+  info "Cleanup script done."
+elif [ $ERRORS -eq 1 ]; then
+  error "Cleanup script done with errors."
+  exit 1
+else
+  warn "Cleanup script done with warnings."
+fi
