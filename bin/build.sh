@@ -163,7 +163,7 @@ copy_contrib_project
 
 cd $BASE_DIR
 info "Launching docker build..."
-docker build -t $IMG_REPO:$IMG_RELEASE --build-arg IMG_RELEASE=$IMG_RELEASE .
+DOCKER_BUILDKIT=1 docker build -t $IMG_REPO:$IMG_RELEASE --build-arg IMG_RELEASE=$IMG_RELEASE .
 if [ $? -ne 0 ]; then
   error "Docker build failed. Aborting!"
   exit 1
