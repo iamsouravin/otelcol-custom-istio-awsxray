@@ -21,7 +21,7 @@ download_istio() {
   ISTIO_DIR=`ls -A1dt istio-* | head -1`
   if [ -z "$ISTIO_DIR" ]; then
     debug "Directory does not exist. Downloading latest version of istio..."
-    curl --silent -L https://istio.io/downloadIstio | sh -
+    curl --silent -L https://istio.io/downloadIstio | ISTIO_VERSION=1.7.4 sh -
     ISTIO_DIR=`ls -A1dt istio-* | head -1`
   else
     debug "Directory already exists."
